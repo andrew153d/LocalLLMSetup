@@ -5,7 +5,7 @@
 # Script to automate installation of Docker, NVIDIA drivers, NVIDIA Container Toolkit, Ollama, and Open WebUI for local LLM setup.
 # Supports remote transfer (-s user@host) and reboot tracking for multi-stage installation.
 
-set -euo pipefail
+#set -euo pipefail
 
 REBOOT_COUNT_FILE="./reboot_count"
 
@@ -116,9 +116,35 @@ if [ "$reboot_count" -eq 2 ]; then
   ollama pull gemma3
 
   # Start Open WebUI with GPU support
-  sudo docker run -d -p 3000:8080 --gpus all --network=host -e OLLAMA_BASE_URL=http://127.0.0.1:11434 -v open-webui:/app/backend/data --name open-webui --restart always ghcr.io/open-webui/open-webui:cuda
+  sudo docker run -d -p 3000:8080 --gpus all \
+    --network=host -e OLLAMA_BASE_URL=http://127.0.0.1:11434 \
+     -e COMFYUI_BASE_URL=http://127.0.0.1:8188/ -e ENABLE_IMAGE_GENERATION=True \
+    -v open-webui:/app/backend/data --name open-webui --restart always ghcr.io/open-webui/open-webui:cuda
 
   echo "[Stage 2] Complete. Rebooting..."
+  sudo reboot now
+fi
+
+if [ "$reboot_count" -eq 3 ]; then
+  # Install ComfyUI
+  # Reference: https://comfyui-wiki.com/en/install/install-comfyui/install-comfyui-on-linux
+  git clone https://github.com/comfyanonymous/ComfyUI.git
+  cd ComfyUI
+
+  # Set up Python virtual environment
+  python3 -m venv venv
+  source venv/bin/activate
+
+  # Install dependencies
+  pip install -r requirements.txt
+
+  # Install PyTorch with CUDA support
+  pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+
+  # Download model checkpoint
+  cd models/checkpoints/
+  comfy model download --url https://huggingface.co/runwayml/stable-diffusion-v1-5/resolve/main/v1-5-pruned.safetensors --relative-path models/checkpoints
+
   sudo reboot now
 fi
 
